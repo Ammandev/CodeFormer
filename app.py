@@ -9,7 +9,12 @@ import os
 import cv2
 import torch
 import torch.nn.functional as F
-import gradio as gr
+from fastapi import FastAPI, UploadFile, File
+from fastapi.responses import FileResponse, HTMLResponse
+import numpy as np
+from pydantic import BaseModel
+from typing import Optional
+import uvicorn
 
 from torchvision.transforms.functional import normalize
 
@@ -32,14 +37,15 @@ pretrain_model_url = {
     'realesrgan': 'https://github.com/sczhou/CodeFormer/releases/download/v0.1.0/RealESRGAN_x2plus.pth'
 }
 # download weights
-if not os.path.exists('CodeFormer/weights/CodeFormer/codeformer.pth'):
-    load_file_from_url(url=pretrain_model_url['codeformer'], model_dir='CodeFormer/weights/CodeFormer', progress=True, file_name=None)
-if not os.path.exists('CodeFormer/weights/facelib/detection_Resnet50_Final.pth'):
-    load_file_from_url(url=pretrain_model_url['detection'], model_dir='CodeFormer/weights/facelib', progress=True, file_name=None)
-if not os.path.exists('CodeFormer/weights/facelib/parsing_parsenet.pth'):
-    load_file_from_url(url=pretrain_model_url['parsing'], model_dir='CodeFormer/weights/facelib', progress=True, file_name=None)
-if not os.path.exists('CodeFormer/weights/realesrgan/RealESRGAN_x2plus.pth'):
-    load_file_from_url(url=pretrain_model_url['realesrgan'], model_dir='CodeFormer/weights/realesrgan', progress=True, file_name=None)
+for key, url in pretrain_model_url.items():
+    if key == 'codeformer' and not os.path.exists('CodeFormer/weights/CodeFormer/codeformer.pth'):
+        load_file_from_url(url=url, model_dir='CodeFormer/weights/CodeFormer', progress=True, file_name=None)
+    elif key == 'detection' and not os.path.exists('CodeFormer/weights/facelib/detection_Resnet50_Final.pth'):
+        load_file_from_url(url=url, model_dir='CodeFormer/weights/facelib', progress=True, file_name=None)
+    elif key == 'parsing' and not os.path.exists('CodeFormer/weights/facelib/parsing_parsenet.pth'):
+        load_file_from_url(url=url, model_dir='CodeFormer/weights/facelib', progress=True, file_name=None)
+    elif key == 'realesrgan' and not os.path.exists('CodeFormer/weights/realesrgan/RealESRGAN_x2plus.pth'):
+        load_file_from_url(url=url, model_dir='CodeFormer/weights/realesrgan', progress=True, file_name=None)
 
 # download images
 torch.hub.download_url_to_file(
@@ -278,31 +284,90 @@ td {
 <center><img src='https://api.infinitescript.com/badgen/count?name=sczhou/CodeFormer&ltext=Visitors&color=6dc9aa' alt='visitors'></center>
 """
 
-demo = gr.Interface(
-    inference, [
-        gr.Image(type="filepath", label="Input"),
-        gr.Checkbox(value=True, label="Pre_Face_Align"),
-        gr.Checkbox(value=True, label="Background_Enhance"),
-        gr.Checkbox(value=True, label="Face_Upsample"),
-        gr.Number(value=2, label="Rescaling_Factor (up to 4)"),
-        gr.Slider(0, 1, value=0.5, step=0.01, label='Codeformer_Fidelity (0 for better quality, 1 for better identity)')
-    ], [
-        gr.Image(type="numpy", label="Output")
-    ],
-    title=title,
-    description=description,
-    article=article,       
-    examples=[
-        ['01.png', True, True, True, 2, 0.7],
-        ['02.jpg', True, True, True, 2, 0.7],
-        ['03.jpg', True, True, True, 2, 0.7],
-        ['04.jpg', True, True, True, 2, 0.1],
-        ['05.jpg', True, True, True, 2, 0.1],
-        ['06.png', False, True, True, 1, 0.5]
-      ],
-    concurrency_limit=2
-    )
+# Remove any Gradio interface setup
+# demo = gr.Interface( ... )
 
-DEBUG = os.getenv('DEBUG') == '1'
-# demo.launch(debug=DEBUG)
-demo.launch(debug=DEBUG, share=True)
+# Make sure the FastAPI app is properly initialized
+app = FastAPI(
+    title="CodeFormer API",
+    description="API for CodeFormer: Robust Face Restoration and Enhancement Network",
+    root_path="/docs2"
+)
+
+# Add a root route
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return """
+    <html>
+        <head>
+            <title>CodeFormer API</title>
+        </head>
+        <body>
+            <h1>CodeFormer API</h1>
+            <p>Available endpoints:</p>
+            <ul>
+                <li><a href="/docs">/docs</a> - Interactive API documentation</li>
+                <li><a href="/redoc">/redoc</a> - Alternative API documentation</li>
+                <li><code>POST /restore/</code> - Endpoint to restore images</li>
+            </ul>
+        </body>
+    </html>
+    """
+
+class RestoreParams(BaseModel):
+    face_align: bool = True
+    background_enhance: bool = True
+    face_upsample: bool = True
+    upscale: float = 2.0
+    codeformer_fidelity: float = 0.5
+
+@app.post("/restore/")
+async def restore_image(
+    file: UploadFile = File(...),
+    face_align: bool = True,
+    background_enhance: bool = True,
+    face_upsample: bool = True,
+    upscale: float = 2.0,
+    codeformer_fidelity: float = 0.5
+):
+    """
+    Restore a face image using CodeFormer
+    """
+    try:
+        # Save uploaded file temporarily
+        temp_file = f"temp_{file.filename}"
+        with open(temp_file, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Process image
+        img = cv2.imread(temp_file)
+        
+        # Run inference using the existing inference function
+        restored_img = inference(
+            temp_file,
+            face_align,
+            background_enhance,
+            face_upsample,
+            upscale,
+            codeformer_fidelity
+        )
+        
+        # Save result
+        output_path = f'output/restored_{file.filename}'
+        os.makedirs('output', exist_ok=True)
+        cv2.imwrite(output_path, cv2.cvtColor(restored_img, cv2.COLOR_RGB2BGR))
+        
+        # Clean up temp file
+        os.remove(temp_file)
+        
+        # Return the processed image
+        return FileResponse(output_path)
+    
+    except Exception as e:
+        return {"error": str(e)}
+
+# Most importantly, modify the main block to use uvicorn
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Remove or comment out any demo.launch()
