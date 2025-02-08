@@ -290,9 +290,9 @@ td {
 # Make sure the FastAPI app is properly initialized
 app = FastAPI(
     title="CodeFormer API",
-    description="API for CodeFormer: Robust Face Restoration and Enhancement Network",
-    root_path="/docs2"
+    description="API for CodeFormer: Robust Face Restoration and Enhancement Network"
 )
+
 
 # Add a root route
 @app.get("/", response_class=HTMLResponse)
