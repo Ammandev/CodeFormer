@@ -10,12 +10,14 @@ pinned: false
 ---
 
 Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
-python -m venv venv
 # For Windows PowerShell
-.\venv\Scripts\Activate.ps1
 
 # OR for Windows Command Prompt (cmd.exe)
 .\venv\Scripts\activate.bat
+
+python -m venv venv
+
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python basicsr/setup.py develop
 pip install gradio
