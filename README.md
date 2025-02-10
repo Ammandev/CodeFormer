@@ -18,6 +18,7 @@ Check out the configuration reference at https://huggingface.co/docs/hub/spaces-
 python -m venv venv
 
 .\venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 pip install -r requirements.txt
 python basicsr/setup.py develop
 pip install gradio

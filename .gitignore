@@ -128,3 +128,4 @@ dlib/
 *.pth
 *_old*
 
+model.safetensors
