@@ -5,12 +5,11 @@ import cv2
 import torch
 import torch.nn.functional as F
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse
 import numpy as np
 from pydantic import BaseModel
 from typing import Optional
 import uvicorn
-import shutil
 
 from torchvision.transforms.functional import normalize
 
@@ -22,14 +21,6 @@ from basicsr.utils.realesrgan_utils import RealESRGANer
 from facelib.utils.misc import is_gray
 
 from basicsr.utils.registry import ARCH_REGISTRY
-
-from PIL import Image
-from io import BytesIO
-from model_handler import EndpointHandler  # Make sure to have this file in your project
-from datetime import datetime
-import uuid
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 
 
 os.system("pip freeze")
@@ -77,7 +68,6 @@ def set_realesrgan():
     )
     return upsampler
 
-# Initialize both models
 upsampler = set_realesrgan()
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 codeformer_net = ARCH_REGISTRY.get("CodeFormer")(
@@ -92,34 +82,7 @@ checkpoint = torch.load(ckpt_path)["params_ema"]
 codeformer_net.load_state_dict(checkpoint)
 codeformer_net.eval()
 
-# Initialize the new model handler
-model_handler = EndpointHandler()
-
 os.makedirs('output', exist_ok=True)
-os.makedirs('input', exist_ok=True)
-os.makedirs('processed', exist_ok=True)
-
-def generate_unique_filename(original_filename):
-    """Generate a unique filename with timestamp and UUID"""
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    unique_id = str(uuid.uuid4())[:8]
-    ext = os.path.splitext(original_filename)[1]
-    return f"{timestamp}_{unique_id}{ext}"
-
-def copy_to_processed(original_path, prefix):
-    """Copies an image to the processed folder with a unique name to prevent overwriting."""
-    if os.path.exists(original_path):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_id = uuid.uuid4().hex[:6]  # Short unique identifier
-        filename = os.path.basename(original_path)
-        name, ext = os.path.splitext(filename)
-        
-        # New unique filename for the processed folder
-        processed_filename = f"{prefix}_{timestamp}_{unique_id}{ext}"
-        processed_path = os.path.join('processed', processed_filename)
-        
-        shutil.copy(original_path, processed_path)
-        print(f"Copied to processed: {processed_path}")  # Debugging log
 
 def inference(image, face_align, background_enhance, face_upsample, upscale, codeformer_fidelity):
     """Run a single prediction on the model"""
@@ -279,21 +242,18 @@ async def restore_image(
     Restore a face image using CodeFormer
     """
     try:
-        # Generate unique filenames
-        unique_input_name = generate_unique_filename(file.filename)
-        input_path = f"input/{unique_input_name}"
-        temp_path = f"temp_{unique_input_name}"
-        output_path = f'output/restored_{unique_input_name}'
-
-        # Save uploaded file to input folder and temp
-        with open(input_path, "wb") as input_file, open(temp_path, "wb") as temp_file:
+        # Save uploaded file temporarily
+        temp_file = f"temp_{file.filename}"
+        with open(temp_file, "wb") as buffer:
             content = await file.read()
-            input_file.write(content)
-            temp_file.write(content)
+            buffer.write(content)
         
         # Process image
+        img = cv2.imread(temp_file)
+        
+        # Run inference using the existing inference function
         restored_img = inference(
-            temp_path,
+            temp_file,
             face_align,
             background_enhance,
             face_upsample,
@@ -302,15 +262,12 @@ async def restore_image(
         )
         
         # Save result
+        output_path = f'output/restored_{file.filename}'
         os.makedirs('output', exist_ok=True)
         cv2.imwrite(output_path, cv2.cvtColor(restored_img, cv2.COLOR_RGB2BGR))
         
-        # Copy files to processed folder using the working method
-        copy_to_processed(input_path, "input")
-        copy_to_processed(output_path, "output")
-        
         # Clean up temp file
-        os.remove(temp_path)
+        os.remove(temp_file)
         
         # Return the processed image
         return FileResponse(output_path)
@@ -318,99 +275,5 @@ async def restore_image(
     except Exception as e:
         return {"error": str(e)}
 
-@app.post("/predict/")
-async def predict(
-    file: UploadFile = File(...)
-):
-    """
-    Endpoint for the new model predictions
-    """
-    try:
-        # Generate unique filenames
-        unique_input_name = generate_unique_filename(file.filename)
-        input_path = f"input/{unique_input_name}"
-        output_path = f"output/predicted_{unique_input_name}"
-
-        # Save input image
-        with open(input_path, "wb") as input_file:
-            content = await file.read()
-            input_file.write(content)
-            
-            # Open and convert image properly
-            image = Image.open(BytesIO(content))
-            # Convert to RGB and remove alpha channel if exists
-            if image.mode in ('RGBA', 'LA'):
-                background = Image.new('RGB', image.size, (255, 255, 255))
-                background.paste(image, mask=image.split()[-1])
-                image = background
-            elif image.mode != 'RGB':
-                image = image.convert('RGB')
-
-        # Run model prediction
-        result_image = model_handler({"inputs": image})
-
-        # Ensure result is in correct format and orientation
-        if isinstance(result_image, np.ndarray):
-            result_image = Image.fromarray(result_image)
-        
-        # Ensure the image is in RGB mode
-        if result_image.mode != 'RGB':
-            result_image = result_image.convert('RGB')
-
-        # Save output image with explicit format and orientation
-        result_image.save(
-            output_path, 
-            format="PNG",
-            optimize=True,
-            quality=95
-        )
-
-        # Copy files to processed folder using the working method
-        copy_to_processed(input_path, "input")
-        copy_to_processed(output_path, "output")
-
-        # Return the processed image
-        return FileResponse(
-            output_path,
-            media_type="image/png",
-            filename=f"predicted_{unique_input_name}"
-        )
-    
-    except Exception as e:
-        print(f"Prediction error: {str(e)}")  # Add logging
-        return {"error": str(e)}
-
-class RequestSizeMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, max_content_size: int):
-        super().__init__(app)
-        self.max_content_size = max_content_size
-
-    async def dispatch(self, request: Request, call_next):
-        content_length = request.headers.get('content-length')
-        if content_length:
-            if int(content_length) > self.max_content_size:
-                return Response(
-                    status_code=413,
-                    content="File too large",
-                    media_type="text/plain"
-                )
-        return await call_next(request)
-
-# Add this after creating the FastAPI app
-app.add_middleware(
-    RequestSizeMiddleware,
-    max_content_size=4 * 1024 * 1024  # 4MB in bytes
-)
-
 if __name__ == "__main__":
-    config = uvicorn.Config(
-        app=app,
-        host="0.0.0.0",
-        port=8000,
-        workers=1,
-        limit_concurrency=5,
-        timeout_keep_alive=30,
-        loop="auto"
-    )
-    server = uvicorn.Server(config)
-    server.run()
+    uvicorn.run(app, host="0.0.0.0", port=8000)

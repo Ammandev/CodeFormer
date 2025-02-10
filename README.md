@@ -34,3 +34,19 @@ sudo systemctl status nginx
 sudo systemctl restart yournewsite
 
 sudo systemctl restart nginx
+
+
+systemctl stop yournewsite
+systemctl disable yournewsite
+
+
+
+cd /usr/share/your-new-site/
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+python3 -m pip install --upgrade pip
+pip install gradio
+pip install -r requirements.txt
+python3 app.py
