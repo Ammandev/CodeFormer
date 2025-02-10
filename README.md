@@ -21,3 +21,13 @@ python basicsr/setup.py develop
 pip install gradio
 python.exe -m pip install --upgrade pip
 python app.py
+
+server commands
+sudo systemctl status nginx
+sudo systemctl restart image_enhancer
+
+sudo systemctl restart nginx
+sudo systemctl status nginx
+sudo systemctl restart yournewsite
+
+sudo systemctl restart nginx

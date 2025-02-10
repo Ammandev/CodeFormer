@@ -1,8 +1,3 @@
-"""
-This file is used for deploying hugging face demo:
-https://huggingface.co/spaces/sczhou/CodeFormer
-"""
-
 import sys
 sys.path.append('CodeFormer')
 import os
@@ -224,76 +219,10 @@ def inference(image, face_align, background_enhance, face_upsample, upscale, cod
         print('Global exception', error)
         return None, None
 
-
-title = "CodeFormer: Robust Face Restoration and Enhancement Network"
-
-description = r"""<center><img src='https://user-images.githubusercontent.com/14334509/189166076-94bb2cac-4f4e-40fb-a69f-66709e3d98f5.png' alt='CodeFormer logo'></center>
-<br>
-<b>Official Gradio demo</b> for <a href='https://github.com/sczhou/CodeFormer' target='_blank'><b>Towards Robust Blind Face Restoration with Codebook Lookup Transformer (NeurIPS 2022)</b></a><br>
-🔥 CodeFormer is a robust face restoration algorithm for old photos or AI-generated faces.<br>
-🤗 Try CodeFormer for improved stable-diffusion generation!<br>
-"""
-
-article = r"""
-If CodeFormer is helpful, please help to ⭐ the <a href='https://github.com/sczhou/CodeFormer' target='_blank'>Github Repo</a>. Thanks! 
-[![GitHub Stars](https://img.shields.io/github/stars/sczhou/CodeFormer?style=social)](https://github.com/sczhou/CodeFormer)
-
----
-
-📝 **Citation**
-
-If our work is useful for your research, please consider citing:
-```bibtex
-@inproceedings{zhou2022codeformer,
-    author = {Zhou, Shangchen and Chan, Kelvin C.K. and Li, Chongyi and Loy, Chen Change},
-    title = {Towards Robust Blind Face Restoration with Codebook Lookup TransFormer},
-    booktitle = {NeurIPS},
-    year = {2022}
-}
-```
-
-📋 **License**
-
-This project is licensed under <a rel="license" href="https://github.com/sczhou/CodeFormer/blob/master/LICENSE">S-Lab License 1.0</a>. 
-Redistribution and use for non-commercial purposes should follow this license.
-
-📧 **Contact**
-
-If you have any questions, please feel free to reach me out at <b>shangchenzhou@gmail.com</b>.
-
-🤗 **Find Me:**
-<style type="text/css">
-td {
-    padding-right: 0px !important;
-}
-
-.gradio-container-4-37-2 .prose table, .gradio-container-4-37-2 .prose tr, .gradio-container-4-37-2 .prose td, .gradio-container-4-37-2 .prose th {
-    border: 0px solid #ffffff;
-    border-bottom: 0px solid #ffffff;
-}
-
-</style>
-
-<table>
-<tr>
-    <td><a href="https://github.com/sczhou"><img style="margin:-0.8em 0 2em 0" src="https://img.shields.io/github/followers/sczhou?style=social" alt="Github Follow"></a></td>
-    <td><a href="https://twitter.com/ShangchenZhou"><img style="margin:-0.8em 0 2em 0" src="https://img.shields.io/twitter/follow/ShangchenZhou?label=%40ShangchenZhou&style=social" alt="Twitter Follow"></a></td>
-</tr>
-</table>
-
-<center><img src='https://api.infinitescript.com/badgen/count?name=sczhou/CodeFormer&ltext=Visitors&color=6dc9aa' alt='visitors'></center>
-"""
-
-# Remove any Gradio interface setup
-# demo = gr.Interface( ... )
-
-# Make sure the FastAPI app is properly initialized
 app = FastAPI(
     title="CodeFormer API",
     description="API for CodeFormer: Robust Face Restoration and Enhancement Network"
 )
-
-
 # Add a root route
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -367,7 +296,5 @@ async def restore_image(
     except Exception as e:
         return {"error": str(e)}
 
-# Most importantly, modify the main block to use uvicorn
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-    # Remove or comment out any demo.launch()
