@@ -15,6 +15,11 @@ from basicsr.utils.realesrgan_utils import RealESRGANer
 from facelib.utils.misc import is_gray
 from basicsr.utils.registry import ARCH_REGISTRY
 import warnings
+import logging
+import time
+
+logger = logging.getLogger(__name__)
+
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 # Download weights
@@ -83,6 +88,9 @@ os.makedirs('output', exist_ok=True)
 def inference(image, face_align, background_enhance, face_upsample, upscale, codeformer_fidelity):
     """Run a single prediction on the model"""
     try:
+        logger.info("Starting inference with CodeFormer")
+        inference_start = time.time()
+        
         # take the default setting for the demo
         only_center_face = False
         draw_box = False
@@ -97,8 +105,9 @@ def inference(image, face_align, background_enhance, face_upsample, upscale, cod
         has_aligned = not face_align
         upscale = 1 if has_aligned else upscale
 
+        logger.debug(f"Loading image from: {image}")
         img = cv2.imread(str(image), cv2.IMREAD_COLOR)
-        print('\timage size:', img.shape)
+        logger.info(f"Image size: {img.shape}")
 
         upscale = int(upscale)
         if upscale > 4:
@@ -175,11 +184,19 @@ def inference(image, face_align, background_enhance, face_upsample, upscale, cod
         else:
             restored_img = restored_face
 
+        # Before saving
+        logger.info("Saving restored image")
+        save_start = time.time()
+        
         save_path = f'output/out.png'
         imwrite(restored_img, str(save_path))
-
+        
+        # After saving
+        logger.info(f"Save completed in {time.time() - save_start:.2f} seconds")
+        logger.info(f"Total inference time: {time.time() - inference_start:.2f} seconds")
+        
         restored_img = cv2.cvtColor(restored_img, cv2.COLOR_BGR2RGB)
         return restored_img
     except Exception as error:
-        print('Global exception', error)
+        logger.error(f"Error in inference: {str(error)}", exc_info=True)
         return None 
